@@ -1,0 +1,11 @@
+resolver: {{stack-resolver}}
+
+packages:
+  - .
+  - location:
+      git: git@git.nejla.com:nejla-ab/common.git
+      commit: ab7d893ecbb513b14c79243e087c9c3fec6f0e60
+    extra-dep: true
+
+extra-deps:
+  - esqueleto-2.5.3
