@@ -21,6 +21,7 @@ executables:
     - -rtsopts
     - -threaded
     - -with-rtsopts=-N
+    - -Wall
     main: Main.hs
     source-dirs: app
     extra-source-files:
@@ -29,7 +30,7 @@ executables:
     - package.yaml
     - README.md
     - stack.yaml
-    ghc-options: -Wall
+
 
 library:
   dependencies:
