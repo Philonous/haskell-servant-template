@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  database:
+    image: postgres:latest
+    container_name: {{name}}-db
+    environment:
+      POSTGRES_USER: {{name}}
+      POSTGRES_DB: {{name}}
+    networks:
+      - {{name}}
+
+  {{name}}:
+    image: nejla/{{name}}:latest
+    container_name: {{name}}
+    environment:
+      DB_HOST: database
+      DB_USER: {{name}}
+      DB_DATABASE: {{name}}
+      log: debug
+    networks:
+      - {{name}}
+    links:
+      - database
+    ports:
+      - 8080:80
+
+networks:
+  {{name}}:

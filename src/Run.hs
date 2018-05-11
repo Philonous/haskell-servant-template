@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
@@ -5,28 +6,25 @@ module Run
     ( runMain
     ) where
 
+import           Control.Concurrent.Async             (race)
+import           Control.Concurrent.MVar
 import           Control.Monad.Logger
 import           Control.Monad.Trans
-import           Data.Aeson
-import           Data.Aeson.TH
 import qualified Data.Char                            as Char
 import           Database.Persist.Sql                 ( runSqlPool
                                                       , runMigration
                                                       , runMigrationSilent
                                                       )
-import           Network.Wai
 import qualified Network.Wai.Handler.Warp             as Warp
 import           Network.Wai.Middleware.RequestLogger
-import           Servant
 import           System.Environment
 import           System.Exit
 import           System.IO
+import qualified System.Posix.Signals                 as Posix
 
 import           NejlaCommon                          (withPool)
-
-import           Api                                  (api)
-import           App                                  (run)
-import           Config                               (loadConf, getConfig)
+import           Config                               (loadConf, getConfig
+                                                      , getPort)
 import           Handlers
 import           Persist.Schema                       (migrateAll)
 
@@ -39,6 +37,12 @@ parseLogLevel str =
     "warn"  -> Just LevelWarn
     "error" -> Just LevelError
     _ -> Nothing
+
+warpSettings :: Int -> Warp.Settings
+warpSettings port =
+    -- Give open connections 1 second to finish running
+    Warp.setGracefulShutdownTimeout (Just 1)
+  $ Warp.setPort port Warp.defaultSettings
 
 runMain :: IO ()
 runMain = do
@@ -56,6 +60,7 @@ runMain = do
   runStderrLoggingT . filterLogger (\_source level -> level >= logLevel) $ do
     confFile <- loadConf "auth_service"
     conf <- getConfig confFile
+    port <- getPort confFile
     withPool confFile 5 $ \pool -> do
       _ <-
         liftIO $
@@ -63,8 +68,21 @@ runMain = do
           (if logLevel <= LevelInfo
              then runMigration migrateAll
              else do
-              _ <- runMigrationSilent migrateAll
-              return ()
-          )
+               _ <- runMigrationSilent migrateAll
+               return ())
           pool
-      liftIO $ Warp.run 80 (logMdw $ serveApp pool conf)
+      -- Install handler for SIGTERM. Without this the server won't properly
+      -- shut down e.g. on docker stop
+      endVar <- liftIO $ newEmptyMVar
+      _ <- liftIO $ Posix.installHandler
+        Posix.sigTERM
+        (Posix.Catch $ do
+            hPutStrLn stderr "Received SIGTERM, stopping."
+            putMVar endVar ()
+        )
+        Nothing
+      _ <- liftIO $ race (takeMVar endVar) $
+        Warp.runSettings
+          (warpSettings port)
+          (logMdw $ serveApp pool conf)
+      return ()

@@ -10,6 +10,7 @@
 
 module Config
   ( module NejlaCommon.Config
+  , getPort
   , getConfig
   ) where
 
@@ -32,6 +33,10 @@ import qualified App
 --------------------------------------------------------------------------------
 -- Configuration ---------------------------------------------------------------
 --------------------------------------------------------------------------------
+
+getPort :: Conf.Config -> LoggingT IO Int
+getPort conf =
+  getConf' "PORT" "http.port" (Right 80) conf
 
 -- | Parse config information
 getConfig :: Conf.Config -> LoggingT IO App.Config
